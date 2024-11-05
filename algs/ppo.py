@@ -70,7 +70,7 @@ class ActorCritic(nn.Module):
 
 
 class PPO:
-    def __init__(self, state_dim, action_dim, hidden_dim, lr_a, lr_c, gamma, K_epochs, eps_clip, device, cuda):
+    def __init__(self, state_dim, action_dim, hidden_dim, lr_a, lr_c, gamma, K_epochs, eps_clip, device, cuda, use_mf):
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.hidden_dim = hidden_dim
@@ -82,7 +82,7 @@ class PPO:
         self.device = device
         self.cuda = cuda
 
-        self.use_mf = True
+        self.use_mf = use_mf
         if self.use_mf:
             state_dim += action_dim
         
@@ -107,7 +107,7 @@ class PPO:
         # print('Total', total_num, 'Trainable', trainable_num)
         # input('Count Simple')
 
-    def select_action(self, state, former_act_prob, store_tuple=True, store_tuple_idx=0):
+    def select_action(self, state, former_act_prob=None, store_tuple=True, store_tuple_idx=0):
         with torch.no_grad():
             state = torch.FloatTensor(state)
             if self.cuda:

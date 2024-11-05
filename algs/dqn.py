@@ -72,7 +72,7 @@ class ValueNet(nn.Module):
 
 
 class DQN:
-    def __init__(self, state_dim, action_dim, hidden_dim, lr, gamma, init_eps, final_eps, eps_decay_step, device, cuda,
+    def __init__(self, state_dim, action_dim, hidden_dim, lr, gamma, init_eps, final_eps, eps_decay_step, device, cuda, use_mf,
                  buffer_size=int(1e6), batch_size=64, update_target_freq=100):
         self.state_dim = state_dim
         self.action_dim = action_dim
@@ -91,7 +91,8 @@ class DQN:
         self.step = 0
         self.buffer = ReplayBuffer(state_dim, action_dim, buffer_size)
 
-        self.use_mf = True
+        self.use_mf = use_mf
+        
         if self.use_mf:
             state_dim += action_dim
 
@@ -110,7 +111,7 @@ class DQN:
         # print('MLP Param Num: ', params)
         # input('Count MLP')
 
-    def select_action(self, states, former_act_prob, store_tuple=True, store_tuple_idx=0):
+    def select_action(self, states, former_act_prob=None, store_tuple=True, store_tuple_idx=0):
         if store_tuple:
             self.buffer.append_state(states[store_tuple_idx])
         n = len(states)
