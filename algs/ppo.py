@@ -82,6 +82,10 @@ class PPO:
         self.device = device
         self.cuda = cuda
 
+        self.use_mf = True
+        if self.use_mf:
+            state_dim += action_dim
+        
         self.buffer = RolloutBuffer()
         self.policy = ActorCritic(state_dim, action_dim, hidden_dim)
         self.optimizer = torch.optim.Adam([
@@ -103,11 +107,16 @@ class PPO:
         # print('Total', total_num, 'Trainable', trainable_num)
         # input('Count Simple')
 
-    def select_action(self, state, store_tuple=True, store_tuple_idx=0):
+    def select_action(self, state, former_act_prob, store_tuple=True, store_tuple_idx=0):
         with torch.no_grad():
             state = torch.FloatTensor(state)
             if self.cuda:
                 state = state.to(self.device)
+
+            if self.use_mf:
+                former_act_prob = torch.FloatTensor(former_act_prob).to(self.device)
+                state = torch.cat((state, former_act_prob), dim=1)
+                
             action, action_logprob = self.policy_old.act(state)
         if store_tuple:
             self.buffer.states.append(state[store_tuple_idx])
