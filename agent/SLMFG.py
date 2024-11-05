@@ -478,6 +478,11 @@ class SLMFG:
         episode_dist.append(cur_env.get_agent_dist())
         obs, act_masks = cur_env.get_obs(0)
         dones = [False] * cur_env.agent_num
+
+        agent_num = cur_env.agent_num
+        action_num = 5
+        former_act_prob = np.zeros((agent_num, action_num))
+
         for t in range(self.args.episode_len):
             if meta_v is not None:
                 if ret_prob:
@@ -489,7 +494,19 @@ class SLMFG:
                     else:
                         actions = self.policy.select_action(meta_v, obs, pos_emb=pos_emb)
             else:
-                actions = self.policy.select_action(obs)
+                actions = self.policy.select_action(obs, former_act_prob=former_act_prob)
+            
+            # 全部智能体
+            former_act_prob = np.mean(list(map(lambda x: np.eye(action_num)[x], actions)), axis=0)
+            former_act_prob = np.tile(former_act_prob, (agent_num, 1))
+            # 除决策智能体本身以外的智能体
+            # former_act_sum = np.sum(list(map(lambda x: np.eye(action_num)[x], actions)), axis=0)
+            # former_act_prob = np.empty((0, action_num))
+            # for i in range(agent_num):
+            #     tmp = former_act_sum - np.eye(action_num)[actions[i]]
+            #     former_act_prob = np.vstack((former_act_prob, tmp))
+            # former_act_prob /= agent_num-1
+
             rewards = cur_env.step(t + 1, actions, act_masks)
             obs, act_masks = cur_env.get_obs(t + 1)
             if t + 1 == self.args.episode_len:
