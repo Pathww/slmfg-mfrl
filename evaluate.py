@@ -8,9 +8,10 @@ from agent.SLMFG import SLMFG
 
 parser = argparse.ArgumentParser()
 # parser.add_argument('--exp_name', type=str, default='aaa', help='name')
-parser.add_argument('--use_mf', type=bool, default=False, help='Random seed')
-
 parser.add_argument('--seed', type=int, default=1113, help='Random seed')
+parser.add_argument('--use_mf', type=bool, default=False, help='Random seed')
+parser.add_argument('--checkpoint-dir', type=str, default=None, help='checkpoint dir')
+
 parser.add_argument('--map-str', type=str, default='grid', help='Map')
 parser.add_argument('--map-M', type=int, default=10, help='M for grid map')
 parser.add_argument('--map-N', type=int, default=10, help='N for grid map')
@@ -167,6 +168,6 @@ if __name__ == '__main__':
     else:
         torch.manual_seed(args.seed)
     agent = SLMFG(args)
-    agent.train(args.init_checkpoint)
+    agent.eval(args.init_checkpoint)
     if args.transfer:
         agent.transfer()

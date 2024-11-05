@@ -99,7 +99,8 @@ class SLMFG:
                                   K_epochs=args.ppo_K_epochs,
                                   eps_clip=args.ppo_eps_clip,
                                   device=args.device,
-                                  cuda=args.cuda)
+                                  cuda=args.cuda, 
+                                  use_mf=args.use_mf)
             if args.alg == 'dqn':
                 self.policy = DQN(state_dim=self.env.obs_dim,
                                   action_dim=self.env.action_size,
@@ -110,7 +111,8 @@ class SLMFG:
                                   final_eps = args.final_eps,
                                   eps_decay_step = args.eps_decay_step,
                                   device=args.device,
-                                  cuda=args.cuda)
+                                  cuda=args.cuda, 
+                                  use_mf=args.use_mf)
         elif args.pol_type == 'mlp_plus':
             if args.alg == 'ppo':
                 self.policy = AugPPO(meta_v_dim=args.meta_v_dim,
@@ -466,7 +468,7 @@ class SLMFG:
             print(self.run_name)
             time.sleep(args.wait_time)
 
-    def rollout(self, meta_v=None, env=None, ret_prob=False, pos_emb=None, finetune=False):
+    def rollout(self, meta_v=None, env=None, ret_prob=False, pos_emb=None, finetune=False, store_tuple=True):
         episode_reward = 0
         episode_dist = []
         action_probs = []
@@ -479,9 +481,10 @@ class SLMFG:
         obs, act_masks = cur_env.get_obs(0)
         dones = [False] * cur_env.agent_num
 
-        agent_num = cur_env.agent_num
-        action_num = 5
-        former_act_prob = np.zeros((agent_num, action_num))
+        if self.args.use_mf:
+            agent_num = cur_env.agent_num
+            action_num = 5
+            former_act_prob = np.zeros((agent_num, action_num))
 
         for t in range(self.args.episode_len):
             if meta_v is not None:
@@ -494,26 +497,32 @@ class SLMFG:
                     else:
                         actions = self.policy.select_action(meta_v, obs, pos_emb=pos_emb)
             else:
-                actions = self.policy.select_action(obs, former_act_prob=former_act_prob)
+                if self.args.use_mf:
+                    actions = self.policy.select_action(obs, former_act_prob=former_act_prob, store_tuple=store_tuple)
+                else:
+                    actions = self.policy.select_action(obs, store_tuple=store_tuple)
             
-            # 全部智能体
-            former_act_prob = np.mean(list(map(lambda x: np.eye(action_num)[x], actions)), axis=0)
-            former_act_prob = np.tile(former_act_prob, (agent_num, 1))
-            # 除决策智能体本身以外的智能体
-            # former_act_sum = np.sum(list(map(lambda x: np.eye(action_num)[x], actions)), axis=0)
-            # former_act_prob = np.empty((0, action_num))
-            # for i in range(agent_num):
-            #     tmp = former_act_sum - np.eye(action_num)[actions[i]]
-            #     former_act_prob = np.vstack((former_act_prob, tmp))
-            # former_act_prob /= agent_num-1
+            if self.args.use_mf:
+                # 全部智能体
+                former_act_prob = np.mean(list(map(lambda x: np.eye(action_num)[x], actions)), axis=0)
+                former_act_prob = np.tile(former_act_prob, (agent_num, 1))
+                # 除决策智能体本身以外的智能体
+                # former_act_sum = np.sum(list(map(lambda x: np.eye(action_num)[x], actions)), axis=0)
+                # former_act_prob = np.empty((0, action_num))
+                # for i in range(agent_num):
+                #     tmp = former_act_sum - np.eye(action_num)[actions[i]]
+                #     former_act_prob = np.vstack((former_act_prob, tmp))
+                # former_act_prob /= agent_num-1
 
             rewards = cur_env.step(t + 1, actions, act_masks)
             obs, act_masks = cur_env.get_obs(t + 1)
             if t + 1 == self.args.episode_len:
                 dones = [True] * cur_env.agent_num
-            if self.args.alg == 'ppo':
+
+            if self.args.alg == 'ppo' and store_tuple:
                 self.policy.buffer.rewards.append(rewards[0])
                 self.policy.buffer.is_terminals.append(dones[0])
+
             episode_reward += rewards[0]
             episode_dist.append(cur_env.get_agent_dist())
 
@@ -1103,4 +1112,82 @@ class SLMFG:
         print("Started training at (GMT) : ", start_time)
         print("Finished training at (GMT) : ", end_time)
         print("Total training time  : ", end_time - start_time)
+        print("============================================================================================")
+
+    def eval(self, init_checkpoint):
+        args = self.args
+        cuda = args.cuda
+
+        print('Load {} checkpoint {}: {}'.format(args.alg, init_checkpoint, self.args.checkpoint_dir + '/policy_' + str(init_checkpoint) + '.pth'))
+        self.policy.load(self.args.checkpoint_dir + '/policy_' + str(init_checkpoint) + '.pth')
+        start_episode = 0
+    
+        start_time = datetime.now().replace(microsecond=0)
+
+        episode_cnt = start_episode
+        cumulative_rewards = []
+        sample_point_cnt = np.zeros(args.max_agent_num + 1)
+        if args.train_set:
+            train_set = sample_unseen_task(args.min_agent_num, args.max_agent_num + 1, num_of_unseen=args.num_train_task, method=args.mixenv_dist, lam=args.lam)
+        else:
+            train_set = []
+
+        while episode_cnt < args.max_episodes:
+            start = datetime.now().timestamp()
+            if args.min_agent_num != args.max_agent_num:
+                # sample a new env
+                if episode_cnt % args.sample_inter == 0:
+                    if args.train_set:
+                        np.random.seed(episode_cnt)
+                        a_num = np.random.choice(train_set)
+                    else:
+                        if args.mixenv_dist == 'uniform':
+                            np.random.seed(episode_cnt)
+                            a_num = np.random.randint(args.min_agent_num, args.max_agent_num + 1)
+                        elif args.mixenv_dist == 'poisson':
+                            np.random.seed(episode_cnt)
+                            while True:
+                                a_num = np.random.poisson(args.lam, size=1)
+                                if args.min_agent_num <= a_num <= args.max_agent_num:
+                                    break
+                        elif args.mixenv_dist == 'exponent':
+                            np.random.seed(episode_cnt)
+                            while True:
+                                a_num = int(np.round(np.random.exponential(args.lam, size=1)))
+                                if args.min_agent_num <= a_num <= args.max_agent_num:
+                                    break
+                        elif args.mixenv_dist == 'seq':
+                            if a_num < args.max_agent_num:
+                                a_num += 1
+                            else:
+                                a_num = args.min_agent_num
+                        else:
+                            raise ValueError(f"Unknown env sample method: {args.mexenv_dist}")
+                sample_point_cnt[int(a_num)] += 1
+                self.env.reset_agent_pos(a_num)
+            cur_agent_num = self.env.agent_num
+
+            meta_v = None
+            pos_emb = None
+
+            reward, _ = self.rollout(meta_v, pos_emb=pos_emb, store_tuple=False)
+            cumulative_rewards.append(reward)
+            
+            self.writer.add_scalar('reward', reward, episode_cnt)
+           
+            end = datetime.now().timestamp()
+            episode_time = (end - start)  # second
+
+            if episode_cnt % args.print_episodes == 0 or episode_cnt == args.max_episodes - 1:
+                print("(Eval) Seed:{}, env:{}{}, Epi:#{}/{}, AvgR:{:.4f}, Pol:{}-{}, N:{}, MP:{}, T:{:.3f}"
+                      .format(args.seed, args.env_name, self.map_type_str, episode_cnt, args.max_episodes, reward,
+                              args.pol_type, args.alg, cur_agent_num, self.multi_point_str, episode_time))
+
+            episode_cnt += 1
+
+        print("============================================================================================")
+        end_time = datetime.now().replace(microsecond=0)
+        print("Started eval at (GMT) : ", start_time)
+        print("Finished eval at (GMT) : ", end_time)
+        print("Total eval time  : ", end_time - start_time)
         print("============================================================================================")
