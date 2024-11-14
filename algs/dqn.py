@@ -89,12 +89,13 @@ class DQN:
         self.update_target_freq = update_target_freq
         self.action_idx = np.array([i for i in range(action_dim)]).astype('int32')
         self.step = 0
-        self.buffer = ReplayBuffer(state_dim, action_dim, buffer_size)
 
         self.use_mf = use_mf
         
         if self.use_mf:
             state_dim += action_dim
+
+        self.buffer = ReplayBuffer(state_dim, action_dim, buffer_size)
 
         self.policy, self.policy_old = ValueNet(state_dim, action_dim, hidden_dim), ValueNet(state_dim, action_dim, hidden_dim)
         self.policy_old.load_state_dict(self.policy.state_dict())
@@ -112,6 +113,9 @@ class DQN:
         # input('Count MLP')
 
     def select_action(self, states, former_act_prob=None, store_tuple=True, store_tuple_idx=0):
+        if self.use_mf:
+            states = np.concatenate((states, former_act_prob), axis=1)
+
         if store_tuple:
             self.buffer.append_state(states[store_tuple_idx])
         n = len(states)
@@ -119,10 +123,6 @@ class DQN:
         if self.cuda:
             states = states.to(self.device)
         
-        if self.use_mf:
-            former_act_prob = torch.FloatTensor(former_act_prob).to(self.device)
-            states = torch.cat((states, former_act_prob), dim=1)
-
         action_values = self.policy(states).detach()
         if self.cuda: action_values = action_values.cpu()
         best_actions = torch.argmax(action_values, dim=1).numpy()

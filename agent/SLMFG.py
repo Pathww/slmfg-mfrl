@@ -522,7 +522,16 @@ class SLMFG:
             if self.args.alg == 'ppo' and store_tuple:
                 self.policy.buffer.rewards.append(rewards[0])
                 self.policy.buffer.is_terminals.append(dones[0])
-
+            if self.args.alg == 'dqn' and store_tuple:
+                if self.args.use_mf:
+                    state_next = np.concatenate((obs, former_act_prob), axis=1)
+                else:
+                    state_next = obs
+                self.policy.buffer.append_state_next(state_next[0])
+                self.policy.buffer.append_reward(rewards[0])
+                self.policy.buffer.append_is_terminal(dones[0])
+                self.policy.buffer.add_cnt()
+            
             episode_reward += rewards[0]
             episode_dist.append(cur_env.get_agent_dist())
 
@@ -745,7 +754,7 @@ class SLMFG:
             reward, _ = self.rollout(meta_v, pos_emb=pos_emb)
             cumulative_rewards.append(reward)
             self.writer.add_scalar('reward', reward, episode_cnt)
-            if args.alg == 'ppo':
+            if args.alg == 'ppo' or args.alg == 'dqn':
                 if (episode_cnt + 1) % self.args.update_episodes == 0:
                     self.policy.update()
             end = datetime.now().timestamp()
