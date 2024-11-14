@@ -26,6 +26,7 @@ from algs.simple_hyper_ppo_no_head import SimpleHyperPPONoHead
 from algs.simple_hyper_ppo_no_head_last_layer import SimpleHyperPPONoHeadLastLayer
 
 from utils.utils import sample_unseen_task, get_1d_sincos_pos_embed_from_grid
+from envs.utils import ids_1dto2d
 
 class SLMFG:
     """
@@ -35,6 +36,7 @@ class SLMFG:
         if args.min_agent_num == args.max_agent_num:
             args.agent_num = args.min_agent_num
         self.args = args
+        self.render_cnt = 0
         random.seed(args.seed)
         np.random.seed(args.seed)
 
@@ -457,6 +459,13 @@ class SLMFG:
         p = Path(self.checkpoint_dir)
         if not p.is_dir():
             p.mkdir(parents=True)
+
+        if self.args.render:
+            self.render_dir = "".join([self.record_dir, '/render/'])
+            p = Path(self.render_dir)
+            if not p.is_dir():
+                p.mkdir(parents=True)
+                
         self.pret_dir = "".join([args.record, "/", args.env_name, "/pret_pol/"])
         p = Path(self.pret_dir)
         if not p.is_dir():
@@ -480,6 +489,10 @@ class SLMFG:
         episode_dist.append(cur_env.get_agent_dist())
         obs, act_masks = cur_env.get_obs(0)
         dones = [False] * cur_env.agent_num
+
+        if self.args.render:
+            render_record = np.zeros((self.args.episode_len, cur_env.agent_num, 2))
+            self.render_cnt += 1
 
         if self.args.use_mf:
             agent_num = cur_env.agent_num
@@ -514,7 +527,15 @@ class SLMFG:
                 #     former_act_prob = np.vstack((former_act_prob, tmp))
                 # former_act_prob /= agent_num-1
 
-            rewards = cur_env.step(t + 1, actions, act_masks)
+            rewards, agent_final_node_id = cur_env.step(t + 1, actions, act_masks)
+
+            if self.args.render:
+                i, j = ids_1dto2d(agent_final_node_id, self.args.map_M, self.args.map_N)
+                i = np.reshape(i, (cur_env.agent_num,1))
+                j = np.reshape(j, (cur_env.agent_num,1))
+                render_record[t] = np.concatenate((i,j),axis=1)
+                render_orders = cur_env.get_render_orders()
+
             obs, act_masks = cur_env.get_obs(t + 1)
             if t + 1 == self.args.episode_len:
                 dones = [True] * cur_env.agent_num
@@ -538,6 +559,8 @@ class SLMFG:
         if ret_prob:
             return episode_reward, episode_dist, action_probs
 
+        if self.args.render and self.render_cnt % self.args.render_every == 0:
+            np.savez('{}rollout_{}'.format(self.render_dir, self.render_cnt), agents=render_record, orders=render_orders)
         return episode_reward, episode_dist
 
     def train(self, init_checkpoint=0):

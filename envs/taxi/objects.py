@@ -215,6 +215,15 @@ class Map(object):
                     agent_rewards[agent_ids] = reward
 
         return agent_final_node_id, agent_rewards
+    
+    def get_render_orders(self):
+        orders = np.zeros((self.args.episode_len, self.node_num))
+        # [[[] for _ in range(self.node_num)] for _ in range(self.args.episode_len + 1)]
+        for i in range(self.node_num):
+            node = self.nodes[i]
+            for t in range(self.args.episode_len):
+                orders[t][i] = node.order_num[t]
+        return orders
 
 
 
