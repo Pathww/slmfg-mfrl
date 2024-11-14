@@ -9,6 +9,9 @@ from agent.SLMFG import SLMFG
 parser = argparse.ArgumentParser()
 # parser.add_argument('--exp_name', type=str, default='aaa', help='name')
 parser.add_argument('--use_mf', type=bool, default=False, help='mean field method')
+parser.add_argument('--render', type=bool, default=True, help='render')
+parser.add_argument('--render-every', type=int, default=5, help='render every')
+parser.add_argument('--agent-num', type=int, default=50, help='Number of agents')
 
 parser.add_argument('--seed', type=int, default=1113, help='Random seed')
 parser.add_argument('--map-str', type=str, default='grid', help='Map')
@@ -30,7 +33,6 @@ parser.add_argument('--checkpoint-episodes', type=int, default=200000, help='Fre
 parser.add_argument('--max-episodes', type=int, default=2000000, help='Maximum episodes')
 parser.add_argument('--env-name', type=str, default='taxi', help='Experiment name')
 parser.add_argument('--init-checkpoint', type=int, default=0, help='Pretrained checkpoint')
-parser.add_argument('--agent-num', type=int, default=10, help='Number of agents')
 parser.add_argument('--min-agent-num', type=int, default=20, help='Number of agents')
 parser.add_argument('--max-agent-num', type=int, default=20, help='Number of agents')
 parser.add_argument('--local-obs', action='store_false', default=True, help='False-global dist; True-local dist determined by speed')
@@ -153,11 +155,14 @@ if __name__ == '__main__':
     os.environ["CUDA_VISIBLE_DEVICES"] = "0, 1, 2, 3, 4, 5, 6, 7"
     args = parser.parse_args()
     args.cuda = torch.cuda.is_available()
-    print ('Options')
-    print ('=' * 30)
-    for k, v in vars(args).items():
-        print(k + ': ' + str(v))
-    print ('=' * 30)
+
+    args.min_agent_num = args.agent_num
+    args.max_agent_num = args.agent_num
+    # print ('Options')
+    # print ('=' * 30)
+    # for k, v in vars(args).items():
+    #     print(k + ': ' + str(v))
+    # print ('=' * 30)
 
     # seeds = [1576, 1745, 1950]
     # for seed in seeds:

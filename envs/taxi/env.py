@@ -73,4 +73,7 @@ class TaxiSimulator(object):
                 new_agent_node_id = actions
             agent_final_node_id, agent_rewards = self.map.step(t, self.agent_manager.cur_node_id, new_agent_node_id)
             self.agent_manager.set_new_node_id(new_agent_node_id)
-        return agent_rewards
+        return agent_rewards, agent_final_node_id
+    
+    def get_render_orders(self):
+        return self.map.get_render_orders()
