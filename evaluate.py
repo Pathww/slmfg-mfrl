@@ -9,7 +9,7 @@ from agent.SLMFG import SLMFG
 parser = argparse.ArgumentParser()
 # parser.add_argument('--exp_name', type=str, default='aaa', help='name')
 parser.add_argument('--seed', type=int, default=1113, help='Random seed')
-parser.add_argument('--use_mf', type=bool, default=False, help='Random seed')
+parser.add_argument('--use_mf', type=bool, default=False, help='mean field method')
 parser.add_argument('--checkpoint-dir', type=str, default=None, help='checkpoint dir')
 
 parser.add_argument('--map-str', type=str, default='grid', help='Map')
@@ -28,7 +28,7 @@ parser.add_argument('--lr-a', type=float, default=0.00003, help='Learning rate f
 parser.add_argument('--lr-c', type=float, default=0.0003, help='Learning rate for critic')
 parser.add_argument('--record', type=str, default='record', help='Directory record')
 parser.add_argument('--checkpoint-episodes', type=int, default=200000, help='Frequency of saving checkpoints')
-parser.add_argument('--max-episodes', type=int, default=2000000, help='Maximum episodes')
+parser.add_argument('--max-episodes', type=int, default=50, help='Maximum episodes')
 parser.add_argument('--env-name', type=str, default='taxi', help='Experiment name')
 parser.add_argument('--init-checkpoint', type=int, default=0, help='Pretrained checkpoint')
 parser.add_argument('--agent-num', type=int, default=10, help='Number of agents')

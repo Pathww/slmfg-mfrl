@@ -8,7 +8,7 @@ from agent.SLMFG import SLMFG
 
 parser = argparse.ArgumentParser()
 # parser.add_argument('--exp_name', type=str, default='aaa', help='name')
-parser.add_argument('--use_mf', type=bool, default=False, help='Random seed')
+parser.add_argument('--use_mf', type=bool, default=False, help='mean field method')
 
 parser.add_argument('--seed', type=int, default=1113, help='Random seed')
 parser.add_argument('--map-str', type=str, default='grid', help='Map')
