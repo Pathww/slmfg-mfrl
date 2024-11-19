@@ -445,6 +445,8 @@ class SLMFG:
                     aug_str, unified_str, c_h_str, args.alg, reset_eps_str, args.max_episodes, int(args.local_obs), self.meta_v_str,
                     args.mlp_hidden_dim, self.multi_point_str, self.train_set_str, self.norm_N_str, self.old_reg_str, self.new_reg_str,
                     self.pos_emb_str)
+        if args.adv:
+            self.run_name = "adv{}_{}".format(args.adv_num, self.run_name)
         if not args.visualize and not args.transfer and not args.similarity \
                 and not args.reward_analysis and not args.weight_analysis:
             self.writer = SummaryWriter(comment=self.run_name + '_' + str(self.args.env_name))
