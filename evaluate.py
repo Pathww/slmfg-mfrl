@@ -14,6 +14,7 @@ parser.add_argument('--checkpoint-dir', type=str, default=None, help='checkpoint
 parser.add_argument('--render', type=bool, default=True, help='render')
 parser.add_argument('--render-every', type=int, default=5, help='render every')
 parser.add_argument('--agent-num', type=int, default=50, help='Number of agents')
+parser.add_argument('--adv', type=bool, default=False, help='train adv')
 
 parser.add_argument('--map-str', type=str, default='grid', help='Map')
 parser.add_argument('--map-M', type=int, default=10, help='M for grid map')

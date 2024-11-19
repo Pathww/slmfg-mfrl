@@ -12,6 +12,7 @@ parser.add_argument('--use_mf', type=bool, default=False, help='mean field metho
 parser.add_argument('--render', type=bool, default=True, help='render')
 parser.add_argument('--render-every', type=int, default=5, help='render every')
 parser.add_argument('--agent-num', type=int, default=50, help='Number of agents')
+parser.add_argument('--adv', type=bool, default=True, help='train adv')
 parser.add_argument('--adv-num', type=int, default=10, help='set the adversarial agents')
 parser.add_argument('--adv-method', type=str, default='random', choices={'random', 'heuristic'}, help='select adv agents')
 parser.add_argument('--adv-reward', type=str, default='total', choices={'total', 'victim', 'neg'}, help='set the reward function')
