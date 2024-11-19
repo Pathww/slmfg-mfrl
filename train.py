@@ -9,7 +9,7 @@ from agent.SLMFG import SLMFG
 parser = argparse.ArgumentParser()
 # parser.add_argument('--exp_name', type=str, default='aaa', help='name')
 parser.add_argument('--use_mf', type=bool, default=False, help='mean field method')
-parser.add_argument('--render', type=bool, default=True, help='render')
+parser.add_argument('--render', type=bool, default=False, help='render')
 parser.add_argument('--render-every', type=int, default=5, help='render every')
 parser.add_argument('--agent-num', type=int, default=50, help='Number of agents')
 parser.add_argument('--adv', type=bool, default=False, help='train adv')
