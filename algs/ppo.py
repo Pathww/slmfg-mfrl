@@ -70,7 +70,7 @@ class ActorCritic(nn.Module):
 
 
 class PPO:
-    def __init__(self, state_dim, action_dim, hidden_dim, lr_a, lr_c, gamma, K_epochs, eps_clip, device, cuda, use_mf):
+    def __init__(self, agent_num, state_dim, action_dim, hidden_dim, lr_a, lr_c, gamma, K_epochs, eps_clip, device, cuda, use_mf):
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.hidden_dim = hidden_dim
@@ -86,7 +86,11 @@ class PPO:
         if self.use_mf:
             state_dim += action_dim
         
-        self.buffer = RolloutBuffer()
+        self.agent_num = agent_num
+        self.buffer = []
+        for i in range(agent_num):
+            self.buffer.append(RolloutBuffer())
+
         self.policy = ActorCritic(state_dim, action_dim, hidden_dim)
         self.optimizer = torch.optim.Adam([
             {'params': self.policy.actor.parameters(), 'lr': lr_a},
@@ -112,72 +116,72 @@ class PPO:
             state = torch.FloatTensor(state)
             if self.cuda:
                 state = state.to(self.device)
-
-            if self.use_mf:
-                former_act_prob = torch.FloatTensor(former_act_prob).to(self.device)
-                state = torch.cat((state, former_act_prob), dim=1)
                 
             action, action_logprob = self.policy_old.act(state)
         if store_tuple:
-            self.buffer.states.append(state[store_tuple_idx])
-            self.buffer.actions.append(action[store_tuple_idx])
-            self.buffer.logprobs.append(action_logprob[store_tuple_idx])
+            for i in range(self.agent_num):
+                self.buffer[i].states.append(state[i])
+                self.buffer[i].actions.append(action[i])
+                self.buffer[i].logprobs.append(action_logprob[i])
+            
         return action.detach().cpu().numpy()
 
     def update(self):
-        # Monte Carlo estimate of returns
-        rewards = []
-        discounted_reward = 0
-        for reward, is_terminal in zip(reversed(self.buffer.rewards), reversed(self.buffer.is_terminals)):
-            if is_terminal:
-                discounted_reward = 0
-            discounted_reward = reward + (self.gamma * discounted_reward)
-            rewards.insert(0, discounted_reward)
+        for i in range(self.agent_num):
+            buffer = self.buffer[i]
+            # Monte Carlo estimate of returns
+            rewards = []
+            discounted_reward = 0
+            for reward, is_terminal in zip(reversed(buffer.rewards), reversed(buffer.is_terminals)):
+                if is_terminal:
+                    discounted_reward = 0
+                discounted_reward = reward + (self.gamma * discounted_reward)
+                rewards.insert(0, discounted_reward)
 
-        # Normalizing the rewards
-        rewards = torch.tensor(rewards, dtype=torch.float32)
-        if self.cuda:
-            rewards = rewards.to(self.device)
-        rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-7)
+            # Normalizing the rewards
+            rewards = torch.tensor(rewards, dtype=torch.float32)
+            if self.cuda:
+                rewards = rewards.to(self.device)
+            rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-7)
 
-        # convert list to tensor
-        old_states = torch.squeeze(torch.stack(self.buffer.states, dim=0)).detach()
-        old_actions = torch.squeeze(torch.stack(self.buffer.actions, dim=0)).detach()
-        old_logprobs = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0)).detach()
-        if self.cuda:
-            old_states = old_states.to(self.device)
-            old_actions = old_actions.to(self.device)
-            old_logprobs = old_logprobs.to(self.device)
+            # convert list to tensor
+            old_states = torch.squeeze(torch.stack(buffer.states, dim=0)).detach()
+            old_actions = torch.squeeze(torch.stack(buffer.actions, dim=0)).detach()
+            old_logprobs = torch.squeeze(torch.stack(buffer.logprobs, dim=0)).detach()
+            if self.cuda:
+                old_states = old_states.to(self.device)
+                old_actions = old_actions.to(self.device)
+                old_logprobs = old_logprobs.to(self.device)
 
-        # Optimize policy for K epochs
-        for _ in range(self.K_epochs):
-            # Evaluating old actions and values
-            logprobs, state_values, dist_entropy = self.policy.evaluate(old_states, old_actions)
+            # Optimize policy for K epochs
+            for _ in range(self.K_epochs):
+                # Evaluating old actions and values
+                logprobs, state_values, dist_entropy = self.policy.evaluate(old_states, old_actions)
 
-            # match state_values tensor dimensions with rewards tensor
-            state_values = torch.squeeze(state_values)
+                # match state_values tensor dimensions with rewards tensor
+                state_values = torch.squeeze(state_values)
 
-            # Finding the ratio (pi_theta / pi_theta__old)
-            ratios = torch.exp(logprobs - old_logprobs.detach())
+                # Finding the ratio (pi_theta / pi_theta__old)
+                ratios = torch.exp(logprobs - old_logprobs.detach())
 
-            # Finding Surrogate Loss
-            advantages = rewards - state_values.detach()
-            surr1 = ratios * advantages
-            surr2 = torch.clamp(ratios, 1 - self.eps_clip, 1 + self.eps_clip) * advantages
+                # Finding Surrogate Loss
+                advantages = rewards - state_values.detach()
+                surr1 = ratios * advantages
+                surr2 = torch.clamp(ratios, 1 - self.eps_clip, 1 + self.eps_clip) * advantages
 
-            # final loss of clipped objective PPO
-            loss = -torch.min(surr1, surr2) + 0.5 * self.MseLoss(state_values, rewards) - 0.01 * dist_entropy
+                # final loss of clipped objective PPO
+                loss = -torch.min(surr1, surr2) + 0.5 * self.MseLoss(state_values, rewards) - 0.01 * dist_entropy
 
-            # take gradient step
-            self.optimizer.zero_grad()
-            loss.mean().backward()
-            self.optimizer.step()
+                # take gradient step
+                self.optimizer.zero_grad()
+                loss.mean().backward()
+                self.optimizer.step()
 
-        # Copy new weights into old policy
-        self.policy_old.load_state_dict(self.policy.state_dict())
+            # Copy new weights into old policy
+            self.policy_old.load_state_dict(self.policy.state_dict())
 
-        # clear buffer
-        self.buffer.clear()
+            # clear buffer
+            buffer.clear()
 
     def re_init(self):
         self.policy_old.init_actor()
