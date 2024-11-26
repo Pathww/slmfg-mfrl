@@ -61,7 +61,7 @@ class TaxiSimulator(object):
 
         return obs.astype(np.float32, copy=False), feasible_action.astype(np.float32, copy=False)
 
-    def step(self, t, actions, act_mask, representative_agent=True):
+    def step(self, t, actions, act_mask, representative_agent=False):
         if self.args.map_str == 'grid':
             cur_agent_node_id, new_agent_node_id = self.agent_manager.set_new_node_id_by_direction(actions)
             agent_final_node_id, agent_rewards = self.map.step(t, cur_agent_node_id, new_agent_node_id, representative_agent)

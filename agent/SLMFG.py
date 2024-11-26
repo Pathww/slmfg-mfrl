@@ -92,7 +92,8 @@ class SLMFG:
                             int(args.pretrain_critic), args.pretrain_loss_type, args.pretrain_step)
         elif args.pol_type == 'mlp':
             if args.alg == 'ppo':
-                self.policy = PPO(state_dim=self.env.obs_dim,
+                self.policy = PPO(self.args.agent_num,
+                                  state_dim=self.env.obs_dim,
                                   action_dim=self.env.action_size,
                                   hidden_dim=args.mlp_hidden_dim,
                                   lr_a=args.lr_a,
@@ -374,7 +375,8 @@ class SLMFG:
         if args.transfer or args.visualize:
             # BR policy used to evaluate the performance of transfer
             if args.alg == 'ppo':
-                self.br_policy = PPO(state_dim=self.env.obs_dim,
+                self.br_policy = PPO(self.args.agent_num,
+                                     state_dim=self.env.obs_dim,
                                      action_dim=self.env.action_size,
                                      hidden_dim=args.mlp_hidden_dim,
                                      lr_a=args.lr_a,
@@ -491,15 +493,16 @@ class SLMFG:
         episode_dist.append(cur_env.get_agent_dist())
         obs, act_masks = cur_env.get_obs(0)
         dones = [False] * cur_env.agent_num
+        agent_num = cur_env.agent_num
 
         if self.args.render:
             render_record = np.zeros((self.args.episode_len, cur_env.agent_num, 2))
             self.render_cnt += 1
 
         if self.args.use_mf:
-            agent_num = cur_env.agent_num
             action_num = 5
             former_act_prob = np.zeros((agent_num, action_num))
+            obs = np.concatenate((obs, former_act_prob), axis=1)
 
         for t in range(self.args.episode_len):
             if meta_v is not None:
@@ -538,24 +541,23 @@ class SLMFG:
                 render_record[t] = np.concatenate((i,j),axis=1)
                 render_orders = cur_env.get_render_orders()
 
-            obs, act_masks = cur_env.get_obs(t + 1)
+            obs_next, act_masks = cur_env.get_obs(t + 1)
             if t + 1 == self.args.episode_len:
                 dones = [True] * cur_env.agent_num
 
             if self.args.alg == 'ppo' and store_tuple:
-                self.policy.buffer.rewards.append(rewards[0])
-                self.policy.buffer.is_terminals.append(dones[0])
+                for i in range(agent_num):
+                    self.policy.buffer[i].rewards.append(rewards[i])
+                    self.policy.buffer[i].is_terminals.append(dones[i])
+
+            if self.args.use_mf:
+                obs_next = np.concatenate((obs_next, former_act_prob), axis=1)
+
             if self.args.alg == 'dqn' and store_tuple:
-                if self.args.use_mf:
-                    state_next = np.concatenate((obs, former_act_prob), axis=1)
-                else:
-                    state_next = obs
-                self.policy.buffer.append_state_next(state_next[0])
-                self.policy.buffer.append_reward(rewards[0])
-                self.policy.buffer.append_is_terminal(dones[0])
-                self.policy.buffer.add_cnt()
+                self.policy.buffer.push(agent_num, obs, obs_next, actions, rewards, dones)
             
-            episode_reward += rewards[0]
+            obs = obs_next
+            episode_reward += sum(rewards) / len(rewards)
             episode_dist.append(cur_env.get_agent_dist())
 
         if ret_prob:
@@ -599,7 +601,8 @@ class SLMFG:
                              max_meta_v=args.max_agent_num,
                              concat_meta_v_in_hidden=args.concat_meta_v_in_hidden)
             else:
-                ppo = PPO(state_dim=self.env.obs_dim,
+                ppo = PPO(self.args.agent_num,
+                          state_dim=self.env.obs_dim,
                           action_dim=self.env.action_size,
                           hidden_dim=args.mlp_hidden_dim,
                           lr_a=args.lr_a,
@@ -1323,7 +1326,8 @@ class SLMFG:
         cuda = args.cuda
 
         if args.alg == 'ppo':
-            self.policy_normal = PPO(state_dim=self.env.obs_dim,
+            self.policy_normal = PPO(agent_num=self.args.agent_num,
+                                state_dim=self.env.obs_dim,
                                 action_dim=self.env.action_size,
                                 hidden_dim=args.mlp_hidden_dim,
                                 lr_a=args.lr_a,

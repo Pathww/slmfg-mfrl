@@ -19,6 +19,15 @@ class ReplayBuffer(object):
         self.length = 0
         self.flag = 0
 
+    def push(self, n, state, state_next, action, reward, is_terminal):
+        for i in range(n):
+            self.states[self.flag] = state[i]
+            self.states_next[self.flag] = state_next[i]
+            self.actions[self.flag] = action[i]
+            self.rewards[self.flag] = reward[i]
+            self.is_terminals[self.flag] = is_terminal[i]
+            self.add_cnt()
+
     def append_state(self, state):
         self.states[self.flag] = state
 
@@ -113,11 +122,6 @@ class DQN:
         # input('Count MLP')
 
     def select_action(self, states, former_act_prob=None, store_tuple=True, store_tuple_idx=0):
-        if self.use_mf:
-            states = np.concatenate((states, former_act_prob), axis=1)
-
-        if store_tuple:
-            self.buffer.append_state(states[store_tuple_idx])
         n = len(states)
         states = torch.FloatTensor(states)
         if self.cuda:
@@ -134,8 +138,6 @@ class DQN:
             actions = best_actions.astype(np.int32, copy=False)
         if n == 1:
             actions = actions[0]
-        if store_tuple:
-            self.buffer.append_action(actions[store_tuple_idx])
 
         return actions
 
