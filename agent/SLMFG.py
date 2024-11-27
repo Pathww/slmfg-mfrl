@@ -557,7 +557,7 @@ class SLMFG:
                 self.policy.buffer.push(agent_num, obs, obs_next, actions, rewards, dones)
             
             obs = obs_next
-            episode_reward += sum(rewards) / len(rewards)
+            episode_reward += sum(rewards)
             episode_dist.append(cur_env.get_agent_dist())
 
         if ret_prob:
