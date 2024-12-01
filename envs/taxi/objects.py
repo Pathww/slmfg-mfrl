@@ -242,16 +242,19 @@ class Agent_Manager(object):
             self.init_node_id = []
             for i in range(0, 100, 2):
                 self.init_node_id.append(i)
+            self.init_node_id = np.array(self.init_node_id)
         elif args.agent_num == 100:
             self.init_node_id = []
             for i in range(0, 100):
                 self.init_node_id.append(i)
+            self.init_node_id = np.array(self.init_node_id)
         elif args.agent_num == 150:
             self.init_node_id = []
             for i in range(0, 100):
                 self.init_node_id.append(i)
             for i in range(0, 100, 2):
                 self.init_node_id.append(i)
+            self.init_node_id = np.array(self.init_node_id)
         else:
             self.init_node_id = np.random.randint(self.node_num, size=args.agent_num).astype(np.int32)
         self.cur_node_id = copy.deepcopy(self.init_node_id)
