@@ -238,7 +238,22 @@ class Agent_Manager(object):
             self.action_size = 5    # up, down, left, right, stay
         else:
             self.action_size = self.node_num    # action num. = num. of nodes
-        self.init_node_id = np.random.randint(self.node_num, size=args.agent_num).astype(np.int32)
+        if args.agent_num == 50:
+            self.init_node_id = []
+            for i in range(0, 100, 2):
+                self.init_node_id.append(i)
+        elif args.agent_num == 100:
+            self.init_node_id = []
+            for i in range(0, 100):
+                self.init_node_id.append(i)
+        elif args.agent_num == 150:
+            self.init_node_id = []
+            for i in range(0, 100):
+                self.init_node_id.append(i)
+            for i in range(0, 100, 2):
+                self.init_node_id.append(i)
+        else:
+            self.init_node_id = np.random.randint(self.node_num, size=args.agent_num).astype(np.int32)
         self.cur_node_id = copy.deepcopy(self.init_node_id)
         self.pre_node_id = copy.deepcopy(self.init_node_id)
         self.agent_speed = min(args.speed, max_speed) - 1
