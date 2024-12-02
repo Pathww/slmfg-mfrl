@@ -240,8 +240,10 @@ class Agent_Manager(object):
             self.action_size = self.node_num    # action num. = num. of nodes
         if args.agent_num == 50:
             self.init_node_id = []
-            for i in range(0, 100, 2):
-                self.init_node_id.append(i)
+            for i in range(0, 10):
+                s = 0 if i % 2 == 0 else 1
+                for j in range(s, 10, 2):
+                    self.init_node_id.append(i * 10 + j)
             self.init_node_id = np.array(self.init_node_id)
         elif args.agent_num == 100:
             self.init_node_id = []
