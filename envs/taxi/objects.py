@@ -294,8 +294,8 @@ class Agent_Manager(object):
         self.pre_node_id = copy.deepcopy(self.init_node_id)
 
     def set_new_node_id_by_direction(self, action):
-        node_action_node = self.node_action_node_map[self.pre_node_id, :]
         self.pre_node_id = copy.deepcopy(self.cur_node_id)
+        node_action_node = self.node_action_node_map[self.pre_node_id, :]
         self.cur_node_id = node_action_node[range(node_action_node.shape[0]), action].astype(np.int32, copy=False)
         return self.pre_node_id, self.cur_node_id
 
