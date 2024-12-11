@@ -12,6 +12,8 @@ class TaxiSimulator(object):
         self.map = Map(args) 
         self.agent_manager = Agent_Manager(args, self.map.node_num, self.map.max_speed)
         
+        self.init_node_id = self.agent_manager.cur_node_id
+        
         self.map.update_agent_info(self.agent_manager.cur_node_id)
         self.map_M, self.map_N = args.map_M, args.map_N
 
