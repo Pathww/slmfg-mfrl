@@ -11,6 +11,7 @@ from tensorboardX import SummaryWriter
 from datetime import datetime
 import time
 
+from agent.CriticalAgents import CriticalAgents
 from envs.taxi.env import TaxiSimulator
 from envs.crowd.env import Crowd
 from envs.explore.env import Explore2d
@@ -1229,15 +1230,12 @@ class SLMFG:
         print("Total eval time  : ", end_time - start_time)
         print("============================================================================================")
 
-    def rollout_adv(self, meta_v=None, env=None, ret_prob=False, pos_emb=None, finetune=False, store_tuple=True):
-        if self.args.adv_method == 'random':
-            random_list = random.sample(range(self.args.agent_num), self.args.adv_num)
-            adv_agents = sorted(random_list)
-        elif self.args.adv_method == 'heuristic':
-            pass
+    def rollout_adv(self, adv_agents, env=None, store_tuple=True):
         episode_reward = 0
+        victim_episode_reward = 0
+        adv_episode_reward = 0
         episode_dist = []
-        action_probs = []
+
         if env is None:
             cur_env = self.env
         else:
@@ -1245,28 +1243,25 @@ class SLMFG:
         cur_env.reset()
         episode_dist.append(cur_env.get_agent_dist())
         obs, act_masks = cur_env.get_obs(0)
-
+        adv_obs = obs[adv_agents]
         dones = [False] * cur_env.agent_num
+        agent_num = cur_env.agent_num
+        adv_num = len(adv_agents)
 
         if self.args.render:
             render_record = np.zeros((self.args.episode_len, cur_env.agent_num, 2))
             self.render_cnt += 1
 
         if self.args.use_mf:
-            agent_num = cur_env.agent_num
-            adv_num = self.args.adv_num
             action_num = 5
             former_act_prob = np.zeros((agent_num, action_num))
             adv_former_act_prob = np.zeros((adv_num, action_num))
+            obs = np.concatenate((obs, former_act_prob), axis=1)
+            adv_obs = np.concatenate((adv_obs, adv_former_act_prob), axis=1)
 
         for t in range(self.args.episode_len):
-            adv_obs = obs[adv_agents]
-            if self.args.use_mf:
-                actions = self.policy_normal.select_action(obs, former_act_prob=former_act_prob, store_tuple=store_tuple)
-                adv_actions = self.policy.select_action(adv_obs, former_act_prob=adv_former_act_prob, store_tuple=store_tuple)
-            else:
-                actions = self.policy_normal.select_action(obs, store_tuple=store_tuple)
-                adv_actions = self.policy.select_action(adv_obs, store_tuple=store_tuple)
+            actions = self.policy_normal.select_action(obs, store_tuple=False)
+            adv_actions = self.policy.select_action(adv_obs, store_tuple=store_tuple)
 
             actions[adv_agents] = adv_actions
 
@@ -1293,37 +1288,53 @@ class SLMFG:
                 render_record[t] = np.concatenate((i,j),axis=1)
                 render_orders = cur_env.get_render_orders()
 
-            obs, act_masks = cur_env.get_obs(t + 1)
+            obs_next, act_masks = cur_env.get_obs(t + 1)
+            adv_obs_next = obs_next[adv_agents]
+
             if t + 1 == self.args.episode_len:
                 dones = [True] * cur_env.agent_num
 
             if self.args.alg == 'ppo' and store_tuple:
-                self.policy.buffer.rewards.append(-rewards[0])
-                self.policy.buffer.is_terminals.append(dones[0])
-            if self.args.alg == 'dqn' and store_tuple:
-                if self.args.use_mf:
-                    state_next = np.concatenate((adv_obs, adv_former_act_prob), axis=1)
-                else:
-                    state_next = obs
-                self.policy.buffer.append_state_next(state_next[0])
-                self.policy.buffer.append_reward(-rewards[0])
-                self.policy.buffer.append_is_terminal(dones[0])
-                self.policy.buffer.add_cnt()
-            
-            episode_reward += rewards[0]
-            episode_dist.append(cur_env.get_agent_dist())
+                for i in range(adv_num):
+                    id = adv_agents[i]
+                    self.policy.buffer[i].rewards.append(-rewards[id])
+                    self.policy.buffer[i].is_terminals.append(dones[id])
 
-        if ret_prob:
-            return episode_reward, episode_dist, action_probs
+            if self.args.use_mf:
+                obs_next = np.concatenate((obs_next, former_act_prob), axis=1)
+                adv_obs_next = np.concatenate((adv_obs_next, adv_former_act_prob), axis=1)
+                
+            if self.args.alg == 'dqn' and store_tuple:
+                self.policy.buffer.push(adv_num, adv_obs, adv_obs_next, actions, rewards, dones)
+            
+            obs = obs_next
+            adv_obs = adv_obs_next
+            episode_reward += sum(rewards)
+            adv_episode_reward += sum(rewards[adv_agents])
+            victim_episode_reward += (sum(rewards) - sum(rewards[adv_agents]))
+            episode_dist.append(cur_env.get_agent_dist())
 
         if self.args.render and self.render_cnt % self.args.render_every == 0:
             np.savez('{}rollout_{}'.format(self.render_dir, self.render_cnt), agents=render_record, orders=render_orders)
-        return episode_reward, episode_dist
+        return episode_reward, victim_episode_reward, adv_episode_reward, episode_dist
 
     def train_adv(self, init_checkpoint):
-
         args = self.args
         cuda = args.cuda
+        self.critical_agents = CriticalAgents(self.args.adv_num, self.args.agent_num)
+
+        if self.args.adv_method == "random":
+            adv_agents = self.critical_agents.random_agents()
+        elif self.args.adv_method == "center":
+            adv_agents = self.critical_agents.center_agents(self.env.init_node_id, args.width)
+        elif self.args.adv_method == "edge":
+            adv_agents = self.critical_agents.edge_agents(self.env.init_node_id, args.width)
+        elif self.args.adv_method == "corner":
+            adv_agents = self.critical_agents.corner_agents(self.env.init_node_id, args.width)
+
+        adv_num = len(adv_agents)
+        print("adv_num: ", adv_num)
+        print("adv ids: ", adv_agents)
 
         if args.alg == 'ppo':
             self.policy_normal = PPO(agent_num=self.args.agent_num,
@@ -1338,8 +1349,31 @@ class SLMFG:
                                 device=args.device,
                                 cuda=args.cuda, 
                                 use_mf=args.use_mf)
+            self.policy = PPO(agent_num=adv_num,
+                                state_dim=self.env.obs_dim,
+                                action_dim=self.env.action_size,
+                                hidden_dim=args.mlp_hidden_dim,
+                                lr_a=args.lr_a,
+                                lr_c=args.lr_c,
+                                gamma=args.gamma,
+                                K_epochs=args.ppo_K_epochs,
+                                eps_clip=args.ppo_eps_clip,
+                                device=args.device,
+                                cuda=args.cuda, 
+                                use_mf=args.use_mf)
         if args.alg == 'dqn':
             self.policy_normal = DQN(state_dim=self.env.obs_dim,
+                                action_dim=self.env.action_size,
+                                hidden_dim=args.mlp_hidden_dim,
+                                lr=args.lr,
+                                gamma=args.gamma,
+                                init_eps = args.init_eps,
+                                final_eps = args.final_eps,
+                                eps_decay_step = args.eps_decay_step,
+                                device=args.device,
+                                cuda=args.cuda, 
+                                use_mf=args.use_mf)
+            self.policy = DQN(state_dim=self.env.obs_dim,
                                 action_dim=self.env.action_size,
                                 hidden_dim=args.mlp_hidden_dim,
                                 lr=args.lr,
@@ -1403,17 +1437,20 @@ class SLMFG:
             meta_v = None
             pos_emb = None
 
-            reward, _ = self.rollout_adv(meta_v, pos_emb=pos_emb)
+            reward, vitim_reward, adv_reward, _ = self.rollout_adv(adv_agents)
 
             cumulative_rewards.append(reward)
             self.writer.add_scalar('reward', reward, episode_cnt)
+            self.writer.add_scalar('victim_reward', vitim_reward, episode_cnt)
+            self.writer.add_scalar('adv_reward', adv_reward, episode_cnt)
+
             if args.alg == 'ppo' or args.alg == 'dqn':
                 if (episode_cnt + 1) % self.args.update_episodes == 0:
                     self.policy.update()
             end = datetime.now().timestamp()
             episode_time = (end - start)  # second
             if episode_cnt % args.print_episodes == 0 or episode_cnt == args.max_episodes - 1:
-                print("(Train) Seed:{}, env:{}{}, Epi:#{}/{}, AvgR:{:.4f}, Pol:{}-{}, N:{}, MP:{}, T:{:.3f}"
+                print("(Train Adv) Seed:{}, env:{}{}, Epi:#{}/{}, AvgR:{:.4f}, Pol:{}-{}, N:{}, MP:{}, T:{:.3f}"
                       .format(args.seed, args.env_name, self.map_type_str, episode_cnt, args.max_episodes, reward,
                               args.pol_type, args.alg, cur_agent_num, self.multi_point_str, episode_time))
             if (episode_cnt + 1) % args.checkpoint_episodes == 0 or (episode_cnt + 1) == args.max_episodes:
@@ -1435,5 +1472,161 @@ class SLMFG:
         print("Started training at (GMT) : ", start_time)
         print("Finished training at (GMT) : ", end_time)
         print("Total training time  : ", end_time - start_time)
+        print("============================================================================================")
+
+    def eval_adv(self, init_checkpoint, adv_checkpoint):
+        args = self.args
+        cuda = args.cuda
+        self.critical_agents = CriticalAgents(self.args.adv_num, self.args.agent_num)
+
+        if self.args.adv_method == "random":
+            adv_agents = self.critical_agents.random_agents()
+        elif self.args.adv_method == "center":
+            adv_agents = self.critical_agents.center_agents(self.env.init_node_id, args.width)
+        elif self.args.adv_method == "edge":
+            adv_agents = self.critical_agents.edge_agents(self.env.init_node_id, args.width)
+        elif self.args.adv_method == "corner":
+            adv_agents = self.critical_agents.corner_agents(self.env.init_node_id, args.width)
+
+        adv_num = len(adv_agents)
+        print("adv_num: ", adv_num)
+        print("adv ids: ", adv_agents)
+
+        if args.alg == 'ppo':
+            self.policy_normal = PPO(agent_num=self.args.agent_num,
+                                state_dim=self.env.obs_dim,
+                                action_dim=self.env.action_size,
+                                hidden_dim=args.mlp_hidden_dim,
+                                lr_a=args.lr_a,
+                                lr_c=args.lr_c,
+                                gamma=args.gamma,
+                                K_epochs=args.ppo_K_epochs,
+                                eps_clip=args.ppo_eps_clip,
+                                device=args.device,
+                                cuda=args.cuda, 
+                                use_mf=args.use_mf)
+            self.policy = PPO(agent_num=adv_num,
+                                state_dim=self.env.obs_dim,
+                                action_dim=self.env.action_size,
+                                hidden_dim=args.mlp_hidden_dim,
+                                lr_a=args.lr_a,
+                                lr_c=args.lr_c,
+                                gamma=args.gamma,
+                                K_epochs=args.ppo_K_epochs,
+                                eps_clip=args.ppo_eps_clip,
+                                device=args.device,
+                                cuda=args.cuda, 
+                                use_mf=args.use_mf)
+        if args.alg == 'dqn':
+            self.policy_normal = DQN(state_dim=self.env.obs_dim,
+                                action_dim=self.env.action_size,
+                                hidden_dim=args.mlp_hidden_dim,
+                                lr=args.lr,
+                                gamma=args.gamma,
+                                init_eps = args.init_eps,
+                                final_eps = args.final_eps,
+                                eps_decay_step = args.eps_decay_step,
+                                device=args.device,
+                                cuda=args.cuda, 
+                                use_mf=args.use_mf)
+            self.policy = DQN(state_dim=self.env.obs_dim,
+                                action_dim=self.env.action_size,
+                                hidden_dim=args.mlp_hidden_dim,
+                                lr=args.lr,
+                                gamma=args.gamma,
+                                init_eps = args.init_eps,
+                                final_eps = args.final_eps,
+                                eps_decay_step = args.eps_decay_step,
+                                device=args.device,
+                                cuda=args.cuda, 
+                                use_mf=args.use_mf)
+                
+        print('Load {} victim checkpoint {}: {}'.format(args.alg, init_checkpoint, self.args.checkpoint_dir + '/policy_' + str(init_checkpoint) + '.pth'))
+        self.policy_normal.load(self.args.checkpoint_dir + '/policy_' + str(init_checkpoint) + '.pth')
+        print('Load {} adv checkpoint {}: {}'.format(args.alg, adv_checkpoint, self.args.checkpoint_dir + '/policy_' + str(init_checkpoint) + '.pth'))
+        self.policy.load(self.args.adv_checkpoint_dir + '/policy_' + str(adv_checkpoint) + '.pth')
+        
+        start_episode = 0
+    
+        start_time = datetime.now().replace(microsecond=0)
+        episode_cnt = start_episode
+
+        cumulative_rewards = []
+        sample_point_cnt = np.zeros(args.max_agent_num + 1)
+        if args.train_set:
+            train_set = sample_unseen_task(args.min_agent_num, args.max_agent_num + 1, num_of_unseen=args.num_train_task, method=args.mixenv_dist, lam=args.lam)
+        else:
+            train_set = []
+
+        while episode_cnt < args.max_episodes:
+            start = datetime.now().timestamp()
+            if args.min_agent_num != args.max_agent_num:
+                # sample a new env
+                if episode_cnt % args.sample_inter == 0:
+                    if args.train_set:
+                        np.random.seed(episode_cnt)
+                        a_num = np.random.choice(train_set)
+                    else:
+                        if args.mixenv_dist == 'uniform':
+                            np.random.seed(episode_cnt)
+                            a_num = np.random.randint(args.min_agent_num, args.max_agent_num + 1)
+                        elif args.mixenv_dist == 'poisson':
+                            np.random.seed(episode_cnt)
+                            while True:
+                                a_num = np.random.poisson(args.lam, size=1)
+                                if args.min_agent_num <= a_num <= args.max_agent_num:
+                                    break
+                        elif args.mixenv_dist == 'exponent':
+                            np.random.seed(episode_cnt)
+                            while True:
+                                a_num = int(np.round(np.random.exponential(args.lam, size=1)))
+                                if args.min_agent_num <= a_num <= args.max_agent_num:
+                                    break
+                        elif args.mixenv_dist == 'seq':
+                            if a_num < args.max_agent_num:
+                                a_num += 1
+                            else:
+                                a_num = args.min_agent_num
+                        else:
+                            raise ValueError(f"Unknown env sample method: {args.mexenv_dist}")
+                sample_point_cnt[int(a_num)] += 1
+                self.env.reset_agent_pos(a_num)
+            cur_agent_num = self.env.agent_num
+
+            meta_v = None
+            pos_emb = None
+
+            reward, vitim_reward, adv_reward, _ = self.rollout_adv(adv_agents, store_tuple=False)
+
+            cumulative_rewards.append(reward)
+            self.writer.add_scalar('reward', reward, episode_cnt)
+            self.writer.add_scalar('victim_reward', vitim_reward, episode_cnt)
+            self.writer.add_scalar('adv_reward', adv_reward, episode_cnt)
+
+            end = datetime.now().timestamp()
+            episode_time = (end - start)  # second
+            if episode_cnt % args.print_episodes == 0 or episode_cnt == args.max_episodes - 1:
+                print("(Eval Adv) Seed:{}, env:{}{}, Epi:#{}/{}, AvgR:{:.4f}, Pol:{}-{}, N:{}, MP:{}, T:{:.3f}"
+                    .format(args.seed, args.env_name, self.map_type_str, episode_cnt, args.max_episodes, reward,
+                            args.pol_type, args.alg, cur_agent_num, self.multi_point_str, episode_time))
+            if (episode_cnt + 1) % args.checkpoint_episodes == 0 or (episode_cnt + 1) == args.max_episodes:
+                self.policy.save("".join([self.checkpoint_dir, 'policy_', str(episode_cnt + 1), '.pth']))
+            if (episode_cnt + 1) % 2000 == 0:
+                pickle.dump({'cumulative_rewards': cumulative_rewards,
+                                'sample_point_cnt': sample_point_cnt,
+                                'train_set': train_set},
+                            open(self.record_dir + '/cumulative_rewards.pik', 'wb'), protocol=pickle.HIGHEST_PROTOCOL)
+            episode_cnt += 1
+
+        print("============================================================================================")
+        end_time = datetime.now().replace(microsecond=0)
+        pickle.dump({'cumulative_rewards': cumulative_rewards,
+                        'sample_point_cnt': sample_point_cnt,
+                        'train_set': train_set,
+                        'total_train_time': end_time - start_time},
+                    open(self.record_dir + '/cumulative_rewards.pik', 'wb'), protocol=pickle.HIGHEST_PROTOCOL)
+        print("Started eval adv at (GMT) : ", start_time)
+        print("Finished eval adv at (GMT) : ", end_time)
+        print("Total eval adv time  : ", end_time - start_time)
         print("============================================================================================")
 
