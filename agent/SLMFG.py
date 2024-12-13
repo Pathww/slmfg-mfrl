@@ -499,6 +499,10 @@ class SLMFG:
         if self.args.render:
             render_record = np.zeros((self.args.episode_len, cur_env.agent_num, 2))
             self.render_cnt += 1
+            i, j = ids_1dto2d(cur_env.agent_manager.cur_node_id, self.args.map_M, self.args.map_N)
+            i = np.reshape(i, (cur_env.agent_num,1))
+            j = np.reshape(j, (cur_env.agent_num,1))
+            render_record[0] = np.concatenate((i,j),axis=1)
 
         if self.args.use_mf:
             action_num = 5
@@ -535,11 +539,11 @@ class SLMFG:
 
             rewards, agent_final_node_id = cur_env.step(t + 1, actions, act_masks)
 
-            if self.args.render:
+            if self.args.render and t+1 < self.args.episode_len:
                 i, j = ids_1dto2d(agent_final_node_id, self.args.map_M, self.args.map_N)
                 i = np.reshape(i, (cur_env.agent_num,1))
                 j = np.reshape(j, (cur_env.agent_num,1))
-                render_record[t] = np.concatenate((i,j),axis=1)
+                render_record[t+1] = np.concatenate((i,j),axis=1)
                 render_orders = cur_env.get_render_orders()
 
             obs_next, act_masks = cur_env.get_obs(t + 1)
@@ -1251,6 +1255,10 @@ class SLMFG:
         if self.args.render:
             render_record = np.zeros((self.args.episode_len, cur_env.agent_num, 2))
             self.render_cnt += 1
+            i, j = ids_1dto2d(cur_env.agent_manager.cur_node_id, self.args.map_M, self.args.map_N)
+            i = np.reshape(i, (cur_env.agent_num,1))
+            j = np.reshape(j, (cur_env.agent_num,1))
+            render_record[0] = np.concatenate((i,j),axis=1)
 
         if self.args.use_mf:
             action_num = 5
@@ -1281,11 +1289,11 @@ class SLMFG:
 
             rewards, agent_final_node_id = cur_env.step(t + 1, actions, act_masks)
 
-            if self.args.render:
+            if self.args.render and t+1 < self.args.episode_len:
                 i, j = ids_1dto2d(agent_final_node_id, self.args.map_M, self.args.map_N)
                 i = np.reshape(i, (cur_env.agent_num,1))
                 j = np.reshape(j, (cur_env.agent_num,1))
-                render_record[t] = np.concatenate((i,j),axis=1)
+                render_record[t+1] = np.concatenate((i,j),axis=1)
                 render_orders = cur_env.get_render_orders()
 
             obs_next, act_masks = cur_env.get_obs(t + 1)
