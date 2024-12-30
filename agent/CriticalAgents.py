@@ -1,4 +1,5 @@
 import random
+import numpy as np
 
 from envs.utils import ids_1dto2d  
 
@@ -42,6 +43,35 @@ class CriticalAgents:
             if ((abs(x[i]-0)<=width) and (abs(y[i]-0)<=width)) or ((abs(x[i]-9)<=width) and (abs(y[i]-0)<=width)) or ((abs(x[i]-0)<=width) and (abs(y[i]-9)<=width)) or ((abs(x[i]-9)<=width) and (abs(y[i]-9)<=width)):
                 adv_agents.append(i)
         return adv_agents
+    
+    def dc_agents(self, init_node_id):
+        degrees =  np.zeros(self.agent_num)
+        x, y = ids_1dto2d(init_node_id)
+        for i in range(self.agent_num):
+            for j in range(self.agent_num):
+                if i == j:
+                    continue
+                if (x[j] == x[i] and y[j] == y[i]) or (x[j] == x[i]+1 and y[j] == y[i]) or (x[j] == x[i]-1 and y[j] == y[i]) or (x[j] == x[i] and y[j] == y[i]+1) or (x[j] == x[i] and y[j] == y[i]-1):
+                    degrees[i] = degrees[i] + 1
+
+        nodes_sorted_by_degree = np.argsort(-degrees)  # 使用负号实现降序排列
+
+        top_nodes = []
+       
+        i = 0
+        while i < len(nodes_sorted_by_degree):
+            current_degree = degrees[nodes_sorted_by_degree[i]]
+            same_degree_nodes = [node for node in nodes_sorted_by_degree[i:] if degrees[node] == current_degree]
+            
+            if len(top_nodes) + len(same_degree_nodes) > self.adv_num:
+                remaining = self.adv_num - len(top_nodes)
+                top_nodes.extend(random.sample(same_degree_nodes, remaining))  # 从相同度数的节点中随机选择剩余的节点
+                break
+            else:
+                top_nodes.extend(same_degree_nodes)  # 否则全部加入
+                i += len(same_degree_nodes)  # 更新索引，跳过这些相同度数的节点
+        result = sorted(top_nodes)
+        return result
 
         
         

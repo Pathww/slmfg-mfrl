@@ -19,7 +19,7 @@ parser.add_argument('--render-every', type=int, default=5, help='render every')
 parser.add_argument('--agent-num', type=int, default=50, help='Number of agents')
 parser.add_argument('--adv', type=bool, default=False, help='train adv')
 parser.add_argument('--adv-num', type=int, default=10, help='set the adversarial agents')
-parser.add_argument('--adv-method', type=str, default='center', choices={'random', 'center', 'edge', 'corner'}, help='select adv agents')
+parser.add_argument('--adv-method', type=str, default='center', choices={'random', 'center', 'edge', 'corner', 'dc'}, help='select adv agents')
 parser.add_argument('--adv-reward', type=str, default='total', choices={'total', 'victim', 'neg'}, help='set the reward function')
 parser.add_argument('--width', type=int, default=2, help='square width')
 

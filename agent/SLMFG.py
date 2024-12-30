@@ -1339,6 +1339,8 @@ class SLMFG:
             adv_agents = self.critical_agents.edge_agents(self.env.init_node_id, args.width)
         elif self.args.adv_method == "corner":
             adv_agents = self.critical_agents.corner_agents(self.env.init_node_id, args.width)
+        elif self.args.adv_method == "dc":
+            adv_agents = self.critical_agents.dc_agents(self.env.init_node_id)
 
         adv_num = len(adv_agents)
         print("adv_num: ", adv_num)
