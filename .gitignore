@@ -2,3 +2,5 @@
 runs
 record
 checkpoint
+*.gif
+*.npz

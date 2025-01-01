@@ -498,6 +498,7 @@ class SLMFG:
 
         if self.args.render:
             render_record = np.zeros((self.args.episode_len, cur_env.agent_num, 2))
+            action_record = np.zeros((self.args.episode_len, cur_env.agent_num))
             self.render_cnt += 1
             i, j = ids_1dto2d(cur_env.agent_manager.cur_node_id, self.args.map_M, self.args.map_N)
             i = np.reshape(i, (cur_env.agent_num,1))
@@ -544,6 +545,7 @@ class SLMFG:
                 i = np.reshape(i, (cur_env.agent_num,1))
                 j = np.reshape(j, (cur_env.agent_num,1))
                 render_record[t+1] = np.concatenate((i,j),axis=1)
+                action_record[t] = actions
                 render_orders = cur_env.get_render_orders()
 
             obs_next, act_masks = cur_env.get_obs(t + 1)
@@ -569,7 +571,7 @@ class SLMFG:
             return episode_reward, episode_dist, action_probs
 
         if self.args.render and self.render_cnt % self.args.render_every == 0:
-            np.savez('{}rollout_{}'.format(self.render_dir, self.render_cnt), agents=render_record, orders=render_orders)
+            np.savez('{}rollout_{}'.format(self.render_dir, self.render_cnt), agents=render_record, orders=render_orders, actions=action_record)
         return episode_reward, episode_dist
 
     def train(self, init_checkpoint=0):
@@ -1254,6 +1256,7 @@ class SLMFG:
 
         if self.args.render:
             render_record = np.zeros((self.args.episode_len, cur_env.agent_num, 2))
+            action_record = np.zeros((self.args.episode_len, cur_env.agent_num))
             self.render_cnt += 1
             i, j = ids_1dto2d(cur_env.agent_manager.cur_node_id, self.args.map_M, self.args.map_N)
             i = np.reshape(i, (cur_env.agent_num,1))
@@ -1294,6 +1297,7 @@ class SLMFG:
                 i = np.reshape(i, (cur_env.agent_num,1))
                 j = np.reshape(j, (cur_env.agent_num,1))
                 render_record[t+1] = np.concatenate((i,j),axis=1)
+                action_record[t] = actions
                 render_orders = cur_env.get_render_orders()
 
             obs_next, act_masks = cur_env.get_obs(t + 1)
@@ -1323,7 +1327,7 @@ class SLMFG:
             episode_dist.append(cur_env.get_agent_dist())
 
         if self.args.render and self.render_cnt % self.args.render_every == 0:
-            np.savez('{}rollout_{}'.format(self.render_dir, self.render_cnt), agents=render_record, orders=render_orders)
+            np.savez('{}rollout_adv_{}'.format(self.render_dir, self.render_cnt), agents=render_record, orders=render_orders, actions=action_record, adv_agents=adv_agents)
         return episode_reward, victim_episode_reward, adv_episode_reward, episode_dist
 
     def train_adv(self, init_checkpoint):
@@ -1553,7 +1557,7 @@ class SLMFG:
                 
         print('Load {} victim checkpoint {}: {}'.format(args.alg, init_checkpoint, self.args.checkpoint_dir + '/policy_' + str(init_checkpoint) + '.pth'))
         self.policy_normal.load(self.args.checkpoint_dir + '/policy_' + str(init_checkpoint) + '.pth')
-        print('Load {} adv checkpoint {}: {}'.format(args.alg, adv_checkpoint, self.args.checkpoint_dir + '/policy_' + str(init_checkpoint) + '.pth'))
+        print('Load {} adv checkpoint {}: {}'.format(args.alg, adv_checkpoint, self.args.checkpoint_dir + '/policy_' + str(adv_checkpoint) + '.pth'))
         self.policy.load(self.args.adv_checkpoint_dir + '/policy_' + str(adv_checkpoint) + '.pth')
         
         start_episode = 0
