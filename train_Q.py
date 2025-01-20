@@ -9,13 +9,14 @@ import setproctitle
 
 parser = argparse.ArgumentParser()
 # parser.add_argument('--exp_name', type=str, default='aaa', help='name')
-parser.add_argument('--use_mf', type=bool, default=False, help='mean field method')
+parser.add_argument('--seed', type=int, default=1113, help='Random seed')
+parser.add_argument('--use_mf', type=bool, default=True, help='mean field method')
+parser.add_argument('--checkpoint-dir', type=str, default=None, help='checkpoint dir')
 parser.add_argument('--render', type=bool, default=False, help='render')
 parser.add_argument('--render-every', type=int, default=5, help='render every')
 parser.add_argument('--agent-num', type=int, default=50, help='Number of agents')
 parser.add_argument('--adv', type=bool, default=False, help='train adv')
 
-parser.add_argument('--seed', type=int, default=1113, help='Random seed')
 parser.add_argument('--map-str', type=str, default='grid', help='Map')
 parser.add_argument('--map-M', type=int, default=10, help='M for grid map')
 parser.add_argument('--map-N', type=int, default=10, help='N for grid map')
@@ -158,7 +159,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     args.cuda = torch.cuda.is_available()
 
-    processname = "Taxi_train_agent{}_{}".format(args.agent_num, args.alg)
+    processname = "Taxi_train-Q_agent{}".format(args.agent_num)
     setproctitle.setproctitle(processname)
 
     args.min_agent_num = args.agent_num
@@ -177,6 +178,6 @@ if __name__ == '__main__':
     else:
         torch.manual_seed(args.seed)
     agent = SLMFG(args)
-    agent.train(args.init_checkpoint)
+    agent.train_q(args.init_checkpoint)
     if args.transfer:
         agent.transfer()

@@ -175,6 +175,8 @@ class DQN:
 
             if self.step % self.update_target_freq == 0:
                 self.policy_old.load_state_dict(self.policy.state_dict())
+            
+            return loss.item()
 
     def re_init(self):
         self.policy.init_actor()

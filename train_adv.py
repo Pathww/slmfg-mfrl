@@ -5,6 +5,7 @@ import argparse
 import torch
 import os
 from agent.SLMFG import SLMFG
+import setproctitle
 
 parser = argparse.ArgumentParser()
 # parser.add_argument('--exp_name', type=str, default='aaa', help='name')
@@ -161,6 +162,9 @@ if __name__ == '__main__':
     os.environ["CUDA_VISIBLE_DEVICES"] = "0, 1, 2, 3, 4, 5, 6, 7"
     args = parser.parse_args()
     args.cuda = torch.cuda.is_available()
+
+    processname = "Taxi_train-adv_agent{}_{}{}".format(args.agent_num, args.adv_method, args.adv_num)
+    setproctitle.setproctitle(processname)
 
     args.min_agent_num = args.agent_num
     args.max_agent_num = args.agent_num

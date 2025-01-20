@@ -1644,3 +1644,192 @@ class SLMFG:
         print("Total eval adv time  : ", end_time - start_time)
         print("============================================================================================")
 
+    def rollout_q(self, meta_v=None, env=None, ret_prob=False, pos_emb=None, finetune=False, store_tuple=True):
+        episode_reward = 0
+        episode_dist = []
+        action_probs = []
+        if env is None:
+            cur_env = self.env
+        else:
+            cur_env = env
+        cur_env.reset()
+        episode_dist.append(cur_env.get_agent_dist())
+        obs, act_masks = cur_env.get_obs(0)
+        dones = [False] * cur_env.agent_num
+        agent_num = cur_env.agent_num
+
+        if self.args.render:
+            render_record = np.zeros((self.args.episode_len, cur_env.agent_num, 2))
+            action_record = np.zeros((self.args.episode_len, cur_env.agent_num))
+            self.render_cnt += 1
+            i, j = ids_1dto2d(cur_env.agent_manager.cur_node_id, self.args.map_M, self.args.map_N)
+            i = np.reshape(i, (cur_env.agent_num,1))
+            j = np.reshape(j, (cur_env.agent_num,1))
+            render_record[0] = np.concatenate((i,j),axis=1)
+
+        if self.args.use_mf:
+            action_num = 5
+            former_act_prob = np.zeros((agent_num, action_num))
+            obs = np.concatenate((obs, former_act_prob), axis=1)
+
+        for t in range(self.args.episode_len):
+            if meta_v is not None:
+                if ret_prob:
+                    actions, probs = self.policy.select_action(meta_v, obs, ret_prob=ret_prob, pos_emb=pos_emb)
+                    action_probs.append(probs)
+                else:
+                    if finetune:
+                        actions = self.policy.select_action_finetune(meta_v, obs, pos_emb=pos_emb)
+                    else:
+                        actions = self.policy.select_action(meta_v, obs, pos_emb=pos_emb)
+            else:
+                if self.args.use_mf:
+                    actions = self.policy.select_action(obs, former_act_prob=former_act_prob, store_tuple=store_tuple)
+                else:
+                    actions = self.policy.select_action(obs, store_tuple=store_tuple)
+            
+            if self.args.use_mf:
+                # 全部智能体
+                former_act_prob = np.mean(list(map(lambda x: np.eye(action_num)[x], actions)), axis=0)
+                former_act_prob = np.tile(former_act_prob, (agent_num, 1))
+                # 除决策智能体本身以外的智能体
+                # former_act_sum = np.sum(list(map(lambda x: np.eye(action_num)[x], actions)), axis=0)
+                # former_act_prob = np.empty((0, action_num))
+                # for i in range(agent_num):
+                #     tmp = former_act_sum - np.eye(action_num)[actions[i]]
+                #     former_act_prob = np.vstack((former_act_prob, tmp))
+                # former_act_prob /= agent_num-1
+
+            rewards, agent_final_node_id = cur_env.step(t + 1, actions, act_masks)
+
+            if self.args.render and t+1 < self.args.episode_len:
+                i, j = ids_1dto2d(agent_final_node_id, self.args.map_M, self.args.map_N)
+                i = np.reshape(i, (cur_env.agent_num,1))
+                j = np.reshape(j, (cur_env.agent_num,1))
+                render_record[t+1] = np.concatenate((i,j),axis=1)
+                action_record[t] = actions
+                render_orders = cur_env.get_render_orders()
+
+            obs_next, act_masks = cur_env.get_obs(t + 1)
+            if t + 1 == self.args.episode_len:
+                dones = [True] * cur_env.agent_num
+
+            if self.args.alg == 'ppo' and store_tuple:
+                for i in range(agent_num):
+                    self.policy.buffer[i].rewards.append(rewards[i])
+                    self.policy.buffer[i].is_terminals.append(dones[i])
+
+            if self.args.use_mf:
+                obs_next = np.concatenate((obs_next, former_act_prob), axis=1)
+
+            # train Q
+            self.q_func.buffer.push(agent_num, obs, obs_next, actions, rewards, dones)
+            
+            obs = obs_next
+            episode_reward += sum(rewards)
+            episode_dist.append(cur_env.get_agent_dist())
+
+        if ret_prob:
+            return episode_reward, episode_dist, action_probs
+
+        if self.args.render and self.render_cnt % self.args.render_every == 0:
+            np.savez('{}rollout_{}'.format(self.render_dir, self.render_cnt), agents=render_record, orders=render_orders, actions=action_record)
+        return episode_reward, episode_dist
+
+    def train_q(self, init_checkpoint):
+        args = self.args
+        cuda = args.cuda
+
+        print('Load {} checkpoint {}: {}'.format(args.alg, init_checkpoint, self.args.checkpoint_dir + '/policy_' + str(init_checkpoint) + '.pth'))
+        self.policy.load(self.args.checkpoint_dir + '/policy_' + str(init_checkpoint) + '.pth')
+        
+        self.q_func = DQN(state_dim=self.env.obs_dim,
+                                action_dim=self.env.action_size,
+                                hidden_dim=args.mlp_hidden_dim,
+                                lr=args.lr,
+                                gamma=args.gamma,
+                                init_eps = args.init_eps,
+                                final_eps = args.final_eps,
+                                eps_decay_step = args.eps_decay_step,
+                                device=args.device,
+                                cuda=args.cuda, 
+                                use_mf=args.use_mf)
+        
+        start_episode = 0
+    
+        start_time = datetime.now().replace(microsecond=0)
+
+        episode_cnt = start_episode
+        cumulative_rewards = []
+        sample_point_cnt = np.zeros(args.max_agent_num + 1)
+        if args.train_set:
+            train_set = sample_unseen_task(args.min_agent_num, args.max_agent_num + 1, num_of_unseen=args.num_train_task, method=args.mixenv_dist, lam=args.lam)
+        else:
+            train_set = []
+
+        while episode_cnt < args.max_episodes:
+            start = datetime.now().timestamp()
+            if args.min_agent_num != args.max_agent_num:
+                # sample a new env
+                if episode_cnt % args.sample_inter == 0:
+                    if args.train_set:
+                        np.random.seed(episode_cnt)
+                        a_num = np.random.choice(train_set)
+                    else:
+                        if args.mixenv_dist == 'uniform':
+                            np.random.seed(episode_cnt)
+                            a_num = np.random.randint(args.min_agent_num, args.max_agent_num + 1)
+                        elif args.mixenv_dist == 'poisson':
+                            np.random.seed(episode_cnt)
+                            while True:
+                                a_num = np.random.poisson(args.lam, size=1)
+                                if args.min_agent_num <= a_num <= args.max_agent_num:
+                                    break
+                        elif args.mixenv_dist == 'exponent':
+                            np.random.seed(episode_cnt)
+                            while True:
+                                a_num = int(np.round(np.random.exponential(args.lam, size=1)))
+                                if args.min_agent_num <= a_num <= args.max_agent_num:
+                                    break
+                        elif args.mixenv_dist == 'seq':
+                            if a_num < args.max_agent_num:
+                                a_num += 1
+                            else:
+                                a_num = args.min_agent_num
+                        else:
+                            raise ValueError(f"Unknown env sample method: {args.mexenv_dist}")
+                sample_point_cnt[int(a_num)] += 1
+                self.env.reset_agent_pos(a_num)
+            cur_agent_num = self.env.agent_num
+
+            meta_v = None
+            pos_emb = None
+
+            reward, _ = self.rollout_q(meta_v, pos_emb=pos_emb, store_tuple=False)
+            cumulative_rewards.append(reward)
+
+            self.writer.add_scalar('reward', reward, episode_cnt)
+            
+            if (episode_cnt + 1) % self.args.update_episodes == 0:
+                loss = self.q_func.update()
+                self.writer.add_scalar('loss', loss, episode_cnt)
+        
+            end = datetime.now().timestamp()
+            episode_time = (end - start)  # second
+
+            if episode_cnt % args.print_episodes == 0 or episode_cnt == args.max_episodes - 1:
+                print("(Train Q) Seed:{}, env:{}{}, Epi:#{}/{}, AvgR:{:.4f}, Pol:{}-{}, N:{}, MP:{}, T:{:.3f}"
+                    .format(args.seed, args.env_name, self.map_type_str, episode_cnt, args.max_episodes, reward,
+                            args.pol_type, args.alg, cur_agent_num, self.multi_point_str, episode_time))
+                
+            if (episode_cnt + 1) % args.checkpoint_episodes == 0 or (episode_cnt + 1) == args.max_episodes:
+                self.q_func.save("".join([self.checkpoint_dir, 'Qfunc_', str(episode_cnt + 1), '.pth']))
+
+            episode_cnt += 1
+
+        print("============================================================================================")
+        end_time = datetime.now().replace(microsecond=0)
+        print("Started train Q at (GMT) : ", start_time)
+        print("Finished train Q at (GMT) : ", end_time)
+        print("Total train Q time  : ", end_time - start_time)
+        print("============================================================================================")
