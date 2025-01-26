@@ -1,5 +1,6 @@
 import random
 import numpy as np
+import torch
 
 from envs.utils import ids_1dto2d  
 
@@ -72,7 +73,39 @@ class CriticalAgents:
                 i += len(same_degree_nodes)  # 更新索引，跳过这些相同度数的节点
         result = sorted(top_nodes)
         return result
+    
+    def ours_agents(self, vnet, obs, init_node_id):
+        self.vnet = vnet
+        eps = 0
 
-        
-        
+        agent_num = self.agent_num
+        xis = np.zeros(agent_num)
+        mask = np.zeros(agent_num)
+        adv_agents = []
+
+        V_ = self.vnet.V(obs, eps, xis)
+
+        for i in range(self.adv_num):
+            temp_xis = xis.copy()
+            max_reward = -1e9
+            target = -1
+            for k in range(agent_num):
+                if mask[k] == 0:
+                    temp_xis_k = temp_xis.copy()
+                    temp_xis_k[k] = 1
+                    temp_eps = (i+1)/agent_num
+                    
+                    V = self.vnet.V(obs, temp_eps, temp_xis_k)
+                    reward = torch.sum(V_ - V)/agent_num
+                
+                    if reward > max_reward:
+                        xis = temp_xis_k.copy()  
+                        V_max = V.clone()    
+                        target = k
+                        max_reward = reward.clone()  
+                    
+            V_ = V_max.clone()
+            mask[target] = 1
+            adv_agents.append(target)
+        return adv_agents
 

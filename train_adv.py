@@ -8,17 +8,17 @@ from agent.SLMFG import SLMFG
 import setproctitle
 
 parser = argparse.ArgumentParser()
-# parser.add_argument('--exp_name', type=str, default='aaa', help='name')
 parser.add_argument('--use_mf', type=bool, default=True, help='mean field method')
 parser.add_argument('--render', type=bool, default=False, help='render')
 parser.add_argument('--render-every', type=int, default=5, help='render every')
 parser.add_argument('--agent-num', type=int, default=50, help='Number of agents')
 parser.add_argument('--adv', type=bool, default=True, help='train adv')
 parser.add_argument('--adv-num', type=int, default=4, help='set the adversarial agents')
-parser.add_argument('--adv-method', type=str, default='dc', choices={'random', 'center', 'edge', 'corner', 'dc'}, help='select adv agents')
+parser.add_argument('--adv-method', type=str, default='ours', choices={'random', 'center', 'edge', 'corner', 'dc', 'ours'}, help='select adv agents')
 parser.add_argument('--adv-reward', type=str, default='total', choices={'total', 'victim', 'neg'}, help='set the reward function')
 parser.add_argument('--seed', type=int, default=1113, help='Random seed')
 parser.add_argument('--checkpoint-dir', type=str, default=None, help='checkpoint dir')
+parser.add_argument('--vfunc-checkpoint', type=int, default=0, help='V func checkpoint')
 parser.add_argument('--width', type=int, default=2, help='square width')
 
 parser.add_argument('--map-str', type=str, default='grid', help='Map')

@@ -3,8 +3,6 @@ import torch
 import torch.nn as nn
 from utils.utils import init_weights, to_Cuda
 
-
-
 class ReplayBuffer(object):
     def __init__(self, state_dim, act_dim, buffer_size):
         self.state_dim = state_dim
@@ -140,7 +138,11 @@ class DQN:
             actions = actions[0]
 
         return actions
-
+    
+    def Q_value(self, states, action):
+        action_values = self.policy(states).detach()
+        return action_values[action].item()
+    
     def get_epsilon(self):
         if self.init_eps == self.final_eps:
             return self.init_eps

@@ -4,3 +4,5 @@ python evaluate_adv.py --device 1 --alg ppo --agent-num 50 --checkpoint-dir chec
 python train_adv.py --device 1 --alg ppo --init-checkpoint 2000000 --checkpoint-dir checkpoint
 python train_adv.py --device 1 --alg ppo --use_mf True --init-checkpoint 2000000 --checkpoint-dir checkpoint
 python train_Q.py --device 1 --alg ppo --agent-num 50 --init-checkpoint 2000000 --checkpoint-dir checkpoint
+python train_V.py --agent-num 50 --init-checkpoint 2000000 --qfunc-checkpoint 2000000 --checkpoint-dir checkpoint
+python train_adv.py --agent-num 50 --adv-num 4 --adv-method ours --init-checkpoint 2000000 --vfunc-checkpoint 648 --checkpoint-dir checkpoint

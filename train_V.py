@@ -5,22 +5,17 @@ import argparse
 import torch
 import os
 from agent.SLMFG import SLMFG
+import setproctitle
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--seed', type=int, default=1113, help='Random seed')
 parser.add_argument('--use_mf', type=bool, default=True, help='mean field method')
 parser.add_argument('--checkpoint-dir', type=str, default=None, help='checkpoint dir')
-parser.add_argument('--init-checkpoint', type=int, default=0, help='init checkpoint')
-parser.add_argument('--adv-checkpoint-dir', type=str, default=None, help='adv checkpoint dir')
-parser.add_argument('--adv-checkpoint', type=int, default=0, help='adv checkpoint')
-parser.add_argument('--render', type=bool, default=True, help='render')
+parser.add_argument('--render', type=bool, default=False, help='render')
 parser.add_argument('--render-every', type=int, default=5, help='render every')
 parser.add_argument('--agent-num', type=int, default=50, help='Number of agents')
-parser.add_argument('--adv', type=bool, default=True, help='train adv')
-parser.add_argument('--adv-num', type=int, default=10, help='set the adversarial agents')
-parser.add_argument('--adv-method', type=str, default='center', choices={'random', 'center', 'edge', 'corner', 'dc'}, help='select adv agents')
-parser.add_argument('--adv-reward', type=str, default='total', choices={'total', 'victim', 'neg'}, help='set the reward function')
-parser.add_argument('--width', type=int, default=2, help='square width')
+parser.add_argument('--adv', type=bool, default=False, help='train adv')
+parser.add_argument('--adv-num', type=int, default=4, help='set the adversarial agents')
 
 parser.add_argument('--map-str', type=str, default='grid', help='Map')
 parser.add_argument('--map-M', type=int, default=10, help='M for grid map')
@@ -38,8 +33,10 @@ parser.add_argument('--lr-a', type=float, default=0.00003, help='Learning rate f
 parser.add_argument('--lr-c', type=float, default=0.0003, help='Learning rate for critic')
 parser.add_argument('--record', type=str, default='record', help='Directory record')
 parser.add_argument('--checkpoint-episodes', type=int, default=200000, help='Frequency of saving checkpoints')
-parser.add_argument('--max-episodes', type=int, default=100, help='Maximum episodes')
+parser.add_argument('--max-episodes', type=int, default=2000000, help='Maximum episodes')
 parser.add_argument('--env-name', type=str, default='taxi', help='Experiment name')
+parser.add_argument('--init-checkpoint', type=int, default=0, help='Pretrained checkpoint')
+parser.add_argument('--qfunc-checkpoint', type=int, default=0, help='Q func checkpoint')
 parser.add_argument('--min-agent-num', type=int, default=20, help='Number of agents')
 parser.add_argument('--max-agent-num', type=int, default=20, help='Number of agents')
 parser.add_argument('--local-obs', action='store_false', default=True, help='False-global dist; True-local dist determined by speed')
@@ -163,6 +160,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
     args.cuda = torch.cuda.is_available()
 
+    processname = "Taxi_train-V_agent{}".format(args.agent_num)
+    setproctitle.setproctitle(processname)
+
     args.min_agent_num = args.agent_num
     args.max_agent_num = args.agent_num
     # print ('Options')
@@ -179,6 +179,6 @@ if __name__ == '__main__':
     else:
         torch.manual_seed(args.seed)
     agent = SLMFG(args)
-    agent.eval_adv(args.init_checkpoint, args.adv_checkpoint)
+    agent.train_v(args.init_checkpoint, args.qfunc_checkpoint)
     if args.transfer:
         agent.transfer()

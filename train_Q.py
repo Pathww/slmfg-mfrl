@@ -8,7 +8,6 @@ from agent.SLMFG import SLMFG
 import setproctitle
 
 parser = argparse.ArgumentParser()
-# parser.add_argument('--exp_name', type=str, default='aaa', help='name')
 parser.add_argument('--seed', type=int, default=1113, help='Random seed')
 parser.add_argument('--use_mf', type=bool, default=True, help='mean field method')
 parser.add_argument('--checkpoint-dir', type=str, default=None, help='checkpoint dir')
