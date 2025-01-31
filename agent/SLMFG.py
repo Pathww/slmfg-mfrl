@@ -1471,6 +1471,8 @@ class SLMFG:
             meta_v = None
             pos_emb = None
 
+            if self.args.adv_method == "random":
+                adv_agents = self.critical_agents.random_agents()
             reward, vitim_reward, adv_reward, _ = self.rollout_adv(adv_agents)
 
             cumulative_rewards.append(reward)
@@ -1521,6 +1523,31 @@ class SLMFG:
             adv_agents = self.critical_agents.edge_agents(self.env.init_node_id, args.width)
         elif self.args.adv_method == "corner":
             adv_agents = self.critical_agents.corner_agents(self.env.init_node_id, args.width)
+        elif self.args.adv_method == "dc":
+            adv_agents = self.critical_agents.dc_agents(self.env.init_node_id)
+        elif self.args.adv_method == "ours":
+            self.vnet = Vnet(state_dim=self.env.obs_dim,
+                                    action_dim=self.env.action_size,
+                                    hidden_dim=args.mlp_hidden_dim,
+                                    lr=args.lr,
+                                    gamma=args.gamma,
+                                    init_eps = args.init_eps,
+                                    final_eps = args.final_eps,
+                                    eps_decay_step = args.eps_decay_step,
+                                    device=args.device,
+                                    cuda=args.cuda, 
+                                    use_mf=args.use_mf,
+                                    adv_num=args.adv_num,
+                                    agent_num=self.env.agent_num,
+                                    q_func=None)
+            self.vnet.load(self.args.checkpoint_dir + '/Vfunc_' + str(self.args.vfunc_checkpoint) + '.pth')
+            self.env.reset()
+            obs, _ = self.env.get_obs(0)
+            if self.args.use_mf:
+                action_num = 5
+                former_act_prob = np.zeros((self.args.agent_num, action_num))
+                obs = np.concatenate((obs, former_act_prob), axis=1)
+            adv_agents = self.critical_agents.ours_agents(self.vnet, obs, self.env.init_node_id)
 
         adv_num = len(adv_agents)
         print("adv_num: ", adv_num)
@@ -1630,6 +1657,8 @@ class SLMFG:
             meta_v = None
             pos_emb = None
 
+            if self.args.adv_method == "random":
+                adv_agents = self.critical_agents.random_agents()
             reward, vitim_reward, adv_reward, _ = self.rollout_adv(adv_agents, store_tuple=False)
 
             cumulative_rewards.append(reward)
